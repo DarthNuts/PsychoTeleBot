@@ -108,14 +108,14 @@ class BotService:
                 psychologists = self.role_manager.list_psychologists()
                 
                 if not psychologists:
-                    response = "Психологи не назначены\n\nДля добавления отправьте ID или @username пользователя:"
+                    response = "👥 *Управление психологами*\n\nПсихологи не назначены\n\n📍 *Действия:*\n1️⃣ Добавить психолога\n2️⃣ Вернуться в меню"
                 else:
-                    response = "👥 Текущие психологи:\n"
+                    response = "👥 *Управление психологами*\n\n*Текущие психологи:*\n"
                     for psy in psychologists:
                         name = f"{psy.first_name or ''} {psy.last_name or ''}".strip()
                         username = f"@{psy.username}" if psy.username else ""
                         response += f"\n• {psy.user_id} ({username or name or 'нет имени'})"
-                    response += "\n\nДля добавления нового отправьте ID или @username:"
+                    response += "\n\n📍 *Действия:*\n1️⃣ Добавить психолога\n2️⃣ Понизить психолога\n0️⃣ Вернуться в меню"
                 
                 return session, response
             
@@ -126,7 +126,23 @@ class BotService:
                 else:
                     response = "📋 Все заявки:\n"
                     for t in tickets[-10:]:  # Последние 10
-                        response += f"\n• {t.id[:8]} - {t.topic} ({t.status.value})"
+                        # Добавляем критичность
+                        severity_icon = {
+                            "Критическая": "🔴",
+                            "Высокая": "🟠",
+                            "Средняя": "🟡",
+                            "Низкая": "🟢"
+                        }.get(t.severity.value, "⚪")
+                        
+                        # Информация о психологе
+                        if t.assigned_to:
+                            psychologist = self.role_manager.get_user(t.assigned_to)
+                            psy_name = f"@{psychologist.username}" if psychologist and psychologist.username else t.assigned_to
+                            psy_info = f" → {psy_name}"
+                        else:
+                            psy_info = " (не назначен)"
+                        
+                        response += f"\n{severity_icon} {t.id[:8]} - {t.topic} ({t.status.value}){psy_info}"
                 return session, response
             
             elif message_lower in ['3', 'назначить на заявку']:
@@ -151,6 +167,35 @@ class BotService:
                 return session, "Перешли в обычное меню"
         
         elif session.state == State.ADMIN_MANAGE_PSYCHOLOGISTS:
+            message_lower = message.strip().lower()
+            
+            if message_lower in ['0', 'вернуться в меню', 'назад']:
+                session.state = State.ADMIN_MENU
+                return session, "Возврат в админ-панель"
+            
+            elif message_lower in ['1', 'добавить психолога', 'добавить']:
+                response = "Отправьте ID или @username пользователя для повышения:"
+                session.state = State.ADMIN_PROMOTE_PSYCHO
+                return session, response
+            
+            elif message_lower in ['2', 'понизить психолога', 'понизить']:
+                psychologists = self.role_manager.list_psychologists()
+                
+                if not psychologists:
+                    response = "❌ Нет психологов для понижения"
+                    session.state = State.ADMIN_MENU
+                    return session, response
+                
+                session.state = State.ADMIN_DEMOTE_PSYCHO_SELECT
+                session.pagination_offset = 0
+                response = self._render_psychologists_for_demotion(psychologists, 0)
+                return session, response
+            
+            else:
+                response = "❌ Неизвестная команда. Выберите действие (1, 2 или 0):"
+                return session, response
+        
+        elif session.state == State.ADMIN_PROMOTE_PSYCHO:
             # Принимаем ID (цифры) или username (с @ или без)
             identifier = message.strip()
             
@@ -184,6 +229,67 @@ class BotService:
             
             session.state = State.ADMIN_MENU
             return session, response
+        
+        elif session.state == State.ADMIN_DEMOTE_PSYCHO_SELECT:
+            # Обработка выбора психолога для понижения
+            message_lower = message.strip().lower()
+            
+            psychologists = self.role_manager.list_psychologists()
+            
+            if message_lower in ['exit', 'отмена', '0']:
+                session.state = State.ADMIN_MENU
+                response = "Отменено"
+                return session, response
+            
+            elif message_lower in ['next', 'далее', 'следующие']:
+                session.pagination_offset += 10
+                if session.pagination_offset >= len(psychologists):
+                    session.pagination_offset -= 10
+                    response = "✅ Это последняя страница"
+                else:
+                    response = self._render_psychologists_for_demotion(psychologists, session.pagination_offset)
+                return session, response
+            
+            elif message_lower in ['prev', 'назад', 'предыдущие']:
+                session.pagination_offset = max(0, session.pagination_offset - 10)
+                response = self._render_psychologists_for_demotion(psychologists, session.pagination_offset)
+                return session, response
+            
+            else:
+                # Пытаемся выбрать психолога по номеру (1-10)
+                try:
+                    psy_num = int(message.strip())
+                    if 1 <= psy_num <= 10:
+                        idx = session.pagination_offset + psy_num - 1
+                        if idx < len(psychologists):
+                            selected_psy = psychologists[idx]
+                            
+                            # Понижаем психолога
+                            success = self.role_manager.demote_psychologist(selected_psy.user_id)
+                            
+                            if success:
+                                # Сохраняем изменения в БД
+                                if self.role_repo:
+                                    updated_profile = self.role_manager.get_user(selected_psy.user_id)
+                                    if updated_profile:
+                                        self.role_repo.save_user(updated_profile)
+                                
+                                display_name = f"@{selected_psy.username}" if selected_psy.username else selected_psy.user_id
+                                response = f"✅ Пользователь {display_name} понижен до обычного пользователя"
+                            else:
+                                response = f"❌ Ошибка при понижении роли"
+                            
+                            session.state = State.ADMIN_MENU
+                            session.pagination_offset = 0
+                            return session, response
+                        else:
+                            response = "❌ Психолог не найден"
+                            return session, response
+                except ValueError:
+                    pass
+                
+                response = "❌ Неверный ввод. Введите номер психолога (1-10) или команду (далее/назад/отмена)"
+                return session, response
         
         elif session.state == State.ADMIN_ASSIGN_TICKET_SELECT:
             # Обработка выбора заявки
@@ -518,6 +624,41 @@ class BotService:
         
         response += "\n📍 *Команды:*\n"
         response += "Введите номер психолога (1-10)\n"
+        if offset > 0:
+            response += "Типовые: `далее` `назад` `отмена`"
+        else:
+            response += "Типовые: `далее` `отмена`"
+        
+        return response
+
+    def _render_psychologists_for_demotion(self, psychologists: list[UserProfile], offset: int) -> str:
+        """Рендеринг страницы психологов для понижения роли"""
+        active_statuses = (TicketStatus.NEW, TicketStatus.IN_PROGRESS, TicketStatus.WAITING_RESPONSE)
+        workload = {}
+        for psy in psychologists:
+            count = len([t for t in self.ticket_repo.get_all() 
+                        if t.assigned_to == psy.user_id and t.status in active_statuses])
+            workload[psy.user_id] = count
+        
+        page_psychologists = psychologists[offset:offset+10]
+        total = len(psychologists)
+        page_num = (offset // 10) + 1
+        max_pages = (total + 9) // 10
+        
+        response = f"⬇️ *Понижение психолога (стр. {page_num}/{max_pages})*\n\n"
+        response += "*Психологи:*\n"
+        for i, psy in enumerate(page_psychologists, 1):
+            name_display = f"@{psy.username}" if psy.username else psy.user_id
+            full_name = f"{psy.first_name or ''} {psy.last_name or ''}".strip()
+            load = workload.get(psy.user_id, 0)
+            
+            response += f"{i}. {name_display}"
+            if full_name:
+                response += f" ({full_name})"
+            response += f" - {load} активных заявок\n"
+        
+        response += "\n📍 *Команды:*\n"
+        response += "Введите номер психолога (1-10) для понижения\n"
         if offset > 0:
             response += "Типовые: `далее` `назад` `отмена`"
         else:
