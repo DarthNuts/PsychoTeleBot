@@ -28,6 +28,8 @@ class State(str, Enum):
     ADMIN_MENU = "ADMIN_MENU"
     ADMIN_MANAGE_PSYCHOLOGISTS = "ADMIN_MANAGE_PSYCHOLOGISTS"
     ADMIN_PROMOTE_PSYCHO = "ADMIN_PROMOTE_PSYCHO"
+    ADMIN_ASSIGN_TICKET_SELECT = "ADMIN_ASSIGN_TICKET_SELECT"
+    ADMIN_ASSIGN_PSYCHO_SELECT = "ADMIN_ASSIGN_PSYCHO_SELECT"
 
 
 class TicketStatus(str, Enum):
@@ -90,6 +92,8 @@ class UserSession:
     consultation_form: ConsultationForm = field(default_factory=ConsultationForm)
     ai_context: list[dict] = field(default_factory=list)
     current_ticket_id: Optional[str] = None
+    pagination_offset: int = 0  # Для пагинации списков
+    selected_ticket_id: Optional[str] = None  # Выбранная заявка при назначении
 
     def reset_form(self):
         """Сброс формы консультации"""

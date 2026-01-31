@@ -1,7 +1,7 @@
 """Telegram адаптер для PsychoTeleBot"""
 import logging
 import os
-from telegram import Update
+from telegram import Update, BotCommand
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from application.bot_service import BotService
 from application.state_machine import StateMachine
@@ -41,11 +41,26 @@ class TelegramBot:
             session_repo, 
             ticket_repo, 
             state_machine,
-            role_manager
+            role_manager,
+            role_repo  # Передаем role_repo для сохранения профилей
         )
         self.role_repo = role_repo
         self.application = Application.builder().token(token).build()
         self._register_handlers()
+        
+        # Регистрируем команды для меню Telegram
+        self.application.post_init = self._post_init
+
+    async def _post_init(self, application: Application):
+        """Устанавливаем команды бота после инициализации"""
+        commands = [
+            BotCommand("start", "Начать работу с ботом"),
+            BotCommand("menu", "Главное меню"),
+            BotCommand("clear", "Очистить контекст ИИ"),
+            BotCommand("help", "Справка по командам"),
+        ]
+        await application.bot.set_my_commands(commands)
+        logger.info("Команды бота установлены")
 
     def _register_handlers(self):
         self.application.add_handler(CommandHandler("start", self.handle_start))
@@ -99,3 +114,6 @@ class TelegramBot:
             user_id, message, username, first_name, last_name
         )
         await update.message.reply_text(response, parse_mode="Markdown")
+    def run(self):
+        logger.info("Starting PsychoTeleBot...")
+        self.application.run_polling(allowed_updates=Update.ALL_TYPES)

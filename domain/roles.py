@@ -115,6 +115,23 @@ class RoleManager:
         """Получить список администраторов"""
         return [u for u in self.users.values() if u.role == UserRole.ADMIN]
     
-    def all_users(self) -> list[UserProfile]:
-        """Получить всех пользователей"""
-        return list(self.users.values())
+    def get_user_by_username(self, username: str) -> Optional[UserProfile]:
+        """Найти пользователя по username (с @ или без)"""
+        # Убираем @ если есть
+        clean_username = username.lstrip('@').lower()
+        
+        for user in self.users.values():
+            if user.username and user.username.lower() == clean_username:
+                return user
+        return None
+    
+    def find_user(self, identifier: str) -> Optional[UserProfile]:
+        """Найти пользователя по ID или username"""
+        # Сначала пробуем как ID
+        user = self.get_user(identifier)
+        if user:
+            return user
+        
+        # Потом пробуем как username
+        return self.get_user_by_username(identifier)
+    

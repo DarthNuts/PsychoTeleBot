@@ -45,10 +45,23 @@ class SQLiteSessionRepository(SessionRepository, SQLiteDatabase):
                 form_data TEXT,
                 ai_context TEXT,
                 current_ticket_id TEXT,
+                pagination_offset INTEGER DEFAULT 0,
+                selected_ticket_id TEXT,
                 created_at TEXT,
                 updated_at TEXT
             )
         """)
+        
+        # Добавляем новые колонки если их нет (миграция для существующих БД)
+        try:
+            conn.execute("ALTER TABLE sessions ADD COLUMN pagination_offset INTEGER DEFAULT 0")
+        except:
+            pass
+        try:
+            conn.execute("ALTER TABLE sessions ADD COLUMN selected_ticket_id TEXT")
+        except:
+            pass
+        
         conn.commit()
         conn.close()
     
@@ -64,20 +77,28 @@ class SQLiteSessionRepository(SessionRepository, SQLiteDatabase):
         if not row:
             return None
         
+        # Преобразуем row в dict для удобного доступа
+        row_dict = dict(row)
+        
         # Восстанавливаем объект UserSession
-        from domain.models import ConsultationForm, State
+        from domain.models import ConsultationForm, State, Severity
         
-        form_data = json.loads(row['form_data']) if row['form_data'] else {}
-        ai_context = json.loads(row['ai_context']) if row['ai_context'] else []
+        form_data = json.loads(row_dict['form_data']) if row_dict['form_data'] else {}
+        ai_context = json.loads(row_dict['ai_context']) if row_dict['ai_context'] else []
         
-        session = UserSession(user_id=user_id, state=State(row['state']))
+        session = UserSession(user_id=user_id, state=State(row_dict['state']))
         
         # Восстанавливаем форму
         if form_data:
+            # Преобразуем severity из строки в enum
+            if form_data.get('severity') and isinstance(form_data['severity'], str):
+                form_data['severity'] = Severity(form_data['severity'])
             session.consultation_form = ConsultationForm(**form_data)
         
         session.ai_context = ai_context
-        session.current_ticket_id = row['current_ticket_id']
+        session.current_ticket_id = row_dict.get('current_ticket_id')
+        session.pagination_offset = row_dict.get('pagination_offset', 0) or 0
+        session.selected_ticket_id = row_dict.get('selected_ticket_id')
         
         return session
     
@@ -95,14 +116,16 @@ class SQLiteSessionRepository(SessionRepository, SQLiteDatabase):
         
         conn.execute("""
             INSERT OR REPLACE INTO sessions 
-            (user_id, state, form_data, ai_context, current_ticket_id, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            (user_id, state, form_data, ai_context, current_ticket_id, pagination_offset, selected_ticket_id, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             session.user_id,
             session.state.value,
             json.dumps(form_data),
             json.dumps(session.ai_context),
             session.current_ticket_id,
+            session.pagination_offset,
+            session.selected_ticket_id,
             datetime.now().isoformat()
         ))
         conn.commit()
@@ -311,6 +334,25 @@ class SQLiteRoleRepository:
         conn.commit()
         conn.close()
     
+    def save_user(self, profile: UserProfile) -> None:
+        """Сохранить или обновить профиль пользователя"""
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("""
+            INSERT OR REPLACE INTO user_roles 
+            (user_id, role, username, first_name, last_name, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            profile.user_id,
+            profile.role.value,
+            profile.username,
+            profile.first_name,
+            profile.last_name,
+            profile.created_at.isoformat(),
+            profile.updated_at.isoformat()
+        ))
+        conn.commit()
+        conn.close()
+    
     def get_role(self, user_id: str) -> UserRole:
         """Получить роль пользователя"""
         conn = sqlite3.connect(self.db_path)
@@ -341,7 +383,41 @@ class SQLiteRoleRepository:
             last_name=row[4],
             created_at=datetime.fromisoformat(row[5]),
             updated_at=datetime.fromisoformat(row[6])
-        ) for row in rows]    
+        ) for row in rows]
+    
+    def get_user(self, user_id: str) -> Optional[UserProfile]:
+        """Получить профиль пользователя"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.execute(
+            "SELECT * FROM user_roles WHERE user_id = ?", (user_id,)
+        )
+        row = cursor.fetchone()
+        conn.close()
+        
+        if not row:
+            return None
+        
+        return UserProfile(
+            user_id=row[0],
+            role=UserRole(row[1]),
+            username=row[2],
+            first_name=row[3],
+            last_name=row[4],
+            created_at=datetime.fromisoformat(row[5]),
+            updated_at=datetime.fromisoformat(row[6])
+        )
+    
+    def delete_user(self, user_id: str) -> None:
+        """Удалить пользователя"""
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("DELETE FROM user_roles WHERE user_id = ?", (user_id,))
+        conn.commit()
+        conn.close()
+    
+    def get_users_by_role(self, role: UserRole) -> List[UserProfile]:
+        """Получить пользователей по роли (алиас для list_by_role)"""
+        return self.list_by_role(role)
+    
     def get_all_users(self) -> List[UserProfile]:
         """Получить всех пользователей"""
         conn = sqlite3.connect(self.db_path)
