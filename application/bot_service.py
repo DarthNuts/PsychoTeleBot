@@ -88,6 +88,13 @@ class BotService:
         """Обработка сообщений администратора"""
         message_lower = message.strip().lower()
         
+        # Обработка глобальных команд
+        if message_lower == '/menu':
+            session.state = State.MENU
+            session.pagination_offset = 0
+            session.selected_ticket_id = None
+            return session, "Возврат в обычное меню"
+        
         if session.state == State.MENU or message_lower in ['/start', 'start']:
             session.state = State.ADMIN_MENU
             response = """👑 *АДМИН-ПАНЕЛЬ*
@@ -405,6 +412,11 @@ class BotService:
     def _handle_psychologist_message(self, session: UserSession, message: str, user_id: str) -> tuple:
         """Обработка сообщений психолога"""
         message_lower = message.strip().lower()
+        
+        # Обработка глобальных команд
+        if message_lower == '/menu':
+            session.state = State.MENU
+            return session, "Возврат в обычное меню"
         
         if session.state == State.MENU or message_lower in ['/start', 'start']:
             session.state = State.PSY_MENU
