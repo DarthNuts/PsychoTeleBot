@@ -2,6 +2,10 @@
 
 Telegram-бот для психологической поддержки с офлайн-отладкой (Clean Architecture).
 
+📚 **[Полный индекс документации →](DOCS_INDEX.md)**
+
+---
+
 ## Описание
 
 PsychoTeleBot — это бот для Telegram, предназначенный для предоставления психологической поддержки. Реализован с использованием принципов Clean Architecture, что позволяет полностью тестировать бизнес-логику **без использования Telegram API**.
@@ -70,7 +74,30 @@ pip install -r requirements.txt
 
 ## Использование
 
-### CLI Debug Mode (офлайн-отладка)
+### Режим 1: Telegram Bot (production)
+
+Для запуска бота в Telegram:
+
+1. **Создайте бота через @BotFather** (см. [TELEGRAM_SETUP.md](TELEGRAM_SETUP.md))
+2. **Установите зависимости:**
+   ```bash
+   pip install -r requirements-telegram.txt
+   ```
+3. **Настройте токен в .env:**
+   ```bash
+   TELEGRAM_BOT_TOKEN=ваш_токен
+   ```
+4. **Запустите бота:**
+   ```bash
+   python -m adapters.telegram.run
+   # или
+   run_telegram.bat  # Windows
+   ./run_telegram.sh # Linux/Mac
+   ```
+
+📖 **Подробная инструкция:** [TELEGRAM_SETUP.md](TELEGRAM_SETUP.md)
+
+### Режим 2: CLI Debug Mode (офлайн-отладка)
 
 Для тестирования бота без Telegram API используйте CLI:
 
@@ -184,28 +211,27 @@ pytest tests/test_bot_service.py::test_consultation_full_flow -v
 
 ## Расширение
 
-### Добавление Telegram адаптера
+### ✅ Подключение к Telegram
 
-1. Создайте директорию `adapters/telegram/`
-2. Реализуйте интеграцию с Telegram Bot API
-3. Используйте `BotService` для обработки сообщений:
+**Уже реализовано!** Полная инструкция: [TELEGRAM_SETUP.md](TELEGRAM_SETUP.md)
 
-```python
-from application.bot_service import BotService
-from application.state_machine import StateMachine
-from infrastructure.in_memory_repositories import (
-    InMemorySessionRepository, InMemoryTicketRepository
-)
+Быстрый старт:
+```bash
+# 1. Установите зависимости
+pip install -r requirements-telegram.txt
 
-# Инициализация
-session_repo = InMemorySessionRepository()
-ticket_repo = InMemoryTicketRepository()
-state_machine = StateMachine()
-bot_service = BotService(session_repo, ticket_repo, state_machine)
+# 2. Создайте .env файл с токеном
+echo "TELEGRAM_BOT_TOKEN=ваш_токен" > .env
 
-# Обработка сообщения
-response = bot_service.process_message(user_id, message_text)
+# 3. Запустите бота
+python -m adapters.telegram.run
 ```
+
+Инструкция включает:
+- Создание бота через @BotFather
+- Полный код адаптера
+- Деплой на сервер (Docker, Heroku, systemd)
+- Решение проблем
 
 ### Добавление базы данных
 

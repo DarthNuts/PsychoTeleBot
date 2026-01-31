@@ -2,6 +2,16 @@
 
 ## 🚀 Быстрый запуск
 
+### Telegram (production)
+```bash
+# См. TELEGRAM_SETUP.md для полной инструкции
+pip install -r requirements-telegram.txt
+# Создайте .env с TELEGRAM_BOT_TOKEN
+python -m adapters.telegram.run
+# или run_telegram.bat / ./run_telegram.sh
+```
+
+### CLI (отладка)
 ```bash
 # Установка
 pip install -r requirements.txt

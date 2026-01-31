@@ -1,0 +1,47 @@
+graph TB
+    Start([🎯 Начало]) --> BotFather[📱 @BotFather в Telegram]
+    BotFather --> NewBot[/newbot]
+    NewBot --> BotName[Имя: PsychoTeleBot]
+    BotName --> Username[Username: psycho_support_bot]
+    Username --> Token[🔑 Получить токен]
+    
+    Token --> SaveToken[💾 Сохранить в .env]
+    SaveToken --> EnvFile[TELEGRAM_BOT_TOKEN=...]
+    
+    EnvFile --> InstallDeps[📦 pip install -r requirements-telegram.txt]
+    InstallDeps --> CreateAdapter[📝 Создать adapters/telegram/]
+    
+    CreateAdapter --> BotPy[bot.py - TelegramBot класс]
+    CreateAdapter --> RunPy[run.py - точка входа]
+    
+    BotPy --> RunBot[🚀 python -m adapters.telegram.run]
+    RunPy --> RunBot
+    
+    RunBot --> BotStarted{Бот запущен?}
+    BotStarted -->|Да| TestBot[✅ Протестировать в Telegram]
+    BotStarted -->|Нет| CheckToken{Токен правильный?}
+    
+    CheckToken -->|Нет| Token
+    CheckToken -->|Да| CheckDeps{Зависимости установлены?}
+    CheckDeps -->|Нет| InstallDeps
+    CheckDeps -->|Да| CheckCode{Код правильный?}
+    CheckCode -->|Нет| CreateAdapter
+    CheckCode -->|Да| Logs[📋 Проверить логи]
+    
+    TestBot --> SendStart[/start в боте]
+    SendStart --> BotResponse{Бот отвечает?}
+    BotResponse -->|Да| Success([🎉 УСПЕХ!])
+    BotResponse -->|Нет| Logs
+    
+    Logs --> FixError[🔧 Исправить ошибку]
+    FixError --> RunBot
+    
+    Success --> UseBot[Пользоваться ботом 🤖]
+    Success --> Deploy[Задеплоить на сервер 🚀]
+    
+    style Start fill:#4CAF50,color:#fff
+    style Success fill:#4CAF50,color:#fff
+    style Token fill:#FF9800,color:#fff
+    style BotStarted fill:#2196F3,color:#fff
+    style BotResponse fill:#2196F3,color:#fff
+    style Logs fill:#f44336,color:#fff
