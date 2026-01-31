@@ -6,6 +6,7 @@ from typing import Optional
 
 class State(str, Enum):
     """Состояния пользователя в боте"""
+    # Обычный пользователь
     MENU = "MENU"
     CONSULT_FORM_TOPIC = "CONSULT_FORM_TOPIC"
     CONSULT_FORM_GENDER = "CONSULT_FORM_GENDER"
@@ -15,6 +16,18 @@ class State(str, Enum):
     AI_CHAT = "AI_CHAT"
     TERMS = "TERMS"
     PSY_QUESTION = "PSY_QUESTION"
+    
+    # Психолог/Админ
+    PSY_MENU = "PSY_MENU"
+    PSY_TICKETS_LIST = "PSY_TICKETS_LIST"
+    PSY_TICKET_OPEN = "PSY_TICKET_OPEN"
+    PSY_TICKET_CHAT = "PSY_TICKET_CHAT"
+    PSY_CHANGE_STATUS = "PSY_CHANGE_STATUS"
+    
+    # Админ
+    ADMIN_MENU = "ADMIN_MENU"
+    ADMIN_MANAGE_PSYCHOLOGISTS = "ADMIN_MANAGE_PSYCHOLOGISTS"
+    ADMIN_PROMOTE_PSYCHO = "ADMIN_PROMOTE_PSYCHO"
 
 
 class TicketStatus(str, Enum):
