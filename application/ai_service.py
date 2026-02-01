@@ -6,6 +6,7 @@ import json
 import logging
 import threading
 import time
+import random
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional
 from collections import deque
@@ -22,6 +23,7 @@ RATE_LIMIT_MESSAGE = "Подожди пару секунд, я ещё отвеч
 MIN_INTERVAL_SECONDS = float(os.getenv("RATE_MIN_INTERVAL_SECONDS", "4"))
 MAX_PER_MINUTE = int(os.getenv("RATE_MAX_PER_MINUTE", "12"))
 MAX_MESSAGE_LENGTH = int(os.getenv("MAX_MESSAGE_LENGTH", "1200"))
+MAX_RESPONSE_LENGTH = int(os.getenv("MAX_RESPONSE_LENGTH", "1200"))
 RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "true").lower() in ("1", "true", "yes")
 if "PYTEST_CURRENT_TEST" in os.environ:
     RATE_LIMIT_ENABLED = False
@@ -45,6 +47,46 @@ class RateState:
 _MEMORY_STORE: Dict[str, UserMemory] = {}
 _MEMORY_LOADED = False
 _RATE_STATE: Dict[str, RateState] = {}
+
+SMALL_TALK = {
+    "привет",
+    "спасибо",
+    "ок",
+    "понял",
+    "поняла",
+    "👍"
+}
+
+SMALL_TALK_REPLIES = [
+    "Спасибо! Я рядом 🙂",
+    "Хорошо, я на связи.",
+    "Понял. Хочешь рассказать подробнее?",
+    "Ок. Если нужна поддержка — напиши.",
+    "Привет! Как ты сейчас себя чувствуешь?"
+]
+
+CRISIS_KEYWORDS = [
+    "покончу с собой",
+    "нет смысла жить",
+    "хочу умереть"
+]
+
+CRISIS_RESPONSE = (
+    "Похоже, тебе очень тяжело. Пожалуйста, обратись к психологу или на горячую линию помощи. "
+    "В РФ можно набрать 112 для экстренной помощи. Ты не один/одна, и поддержку можно получить."
+)
+
+
+def _normalize_message(text: str) -> str:
+    cleaned = text.strip().lower()
+    for ch in ["!", ".", ",", "?", "…", ":", ";"]:
+        cleaned = cleaned.replace(ch, "")
+    return cleaned
+
+
+def _is_crisis_message(text: str) -> bool:
+    normalized = _normalize_message(text)
+    return any(phrase in normalized for phrase in CRISIS_KEYWORDS)
 
 
 def _load_memory_store() -> None:
@@ -131,10 +173,13 @@ class AIService:
 - не перегружай длинными текстами;
 - поддерживай диалог вопросами, если уместно;
 - в кризисных ситуациях мягко советуй обратиться к специалисту или в службу помощи.
+Если пользователь пишет о самоповреждении или суицидальных намерениях, ответь коротко и эмпатично, порекомендуй обратиться к специалисту или на горячую линию помощи и не пытайся решать медицинские проблемы.
 """
     
     FALLBACK_RESPONSE = """Извините, сейчас возникли технические сложности с подключением к AI-ассистенту. 
 Пожалуйста, попробуйте позже или выберите другую опцию в меню."""
+
+    TIMEOUT_RESPONSE = "Сейчас отвечаю медленнее обычного. Попробуй написать ещё раз через минуту."
 
     SUMMARY_PROMPT = """Ты делаешь краткое резюме разговора с пользователем.
 Сожми информацию до 3–5 коротких предложений.
@@ -149,7 +194,7 @@ class AIService:
         model: Optional[str] = None,
         max_tokens: int = 500,
         temperature: float = 0.7,
-        timeout: int = 30,
+        timeout: int = 10,
         max_history: int = 10
     ):
         """
@@ -169,7 +214,7 @@ class AIService:
         self.model = model or os.getenv("OPENROUTER_MODEL", "google/gemini-flash-1.5")
         self.max_tokens = max_tokens
         self.temperature = temperature
-        self.timeout = timeout
+        self.timeout = int(os.getenv("AI_TIMEOUT_SECONDS", str(timeout)))
         self.max_history = max_history
         
         if not self.api_key:
@@ -236,6 +281,9 @@ class AIService:
         try:
             ai_reply = await self._call_llm(messages, self.max_tokens, self.temperature)
 
+            if MAX_RESPONSE_LENGTH > 0 and len(ai_reply) > MAX_RESPONSE_LENGTH:
+                ai_reply = ai_reply[:MAX_RESPONSE_LENGTH].rstrip() + "…"
+
             if user_id is not None:
                 memory = get_user_memory(user_id)
                 memory.last_messages.extend([
@@ -255,7 +303,7 @@ class AIService:
                     
         except httpx.TimeoutException:
             logger.error(f"AI API timeout after {self.timeout}s")
-            return "Извините, ответ AI занимает слишком много времени. Пожалуйста, попробуйте еще раз."
+            return self.TIMEOUT_RESPONSE
             
         except httpx.HTTPStatusError as e:
             logger.error(f"AI API HTTP error: {e.response.status_code} - {e.response.text[:200]}")
@@ -390,6 +438,7 @@ def generate_ai_reply(user_id: str, user_message: str, history: List[Dict[str, s
 
     user_id = str(user_id)
     message_text = user_message or ""
+    normalized = _normalize_message(message_text)
 
     # Проверка длины сообщения
     if len(message_text) > MAX_MESSAGE_LENGTH:
@@ -398,6 +447,12 @@ def generate_ai_reply(user_id: str, user_message: str, history: List[Dict[str, s
     # Инициализируем состояние пользователя
     rate_state = _RATE_STATE.get(user_id) or RateState()
     _RATE_STATE[user_id] = rate_state
+
+    # Кризисные сообщения — отвечаем сразу, без LLM
+    if _is_crisis_message(message_text):
+        rate_state.last_message = message_text
+        rate_state.last_response = CRISIS_RESPONSE
+        return CRISIS_RESPONSE
 
     # Ограничение частоты запросов
     if RATE_LIMIT_ENABLED:
@@ -414,6 +469,13 @@ def generate_ai_reply(user_id: str, user_message: str, history: List[Dict[str, s
 
         rate_state.last_request_at = now
         rate_state.window.append(now)
+
+    # Быстрые ответы на короткие/служебные сообщения
+    if normalized in SMALL_TALK:
+        reply = random.choice(SMALL_TALK_REPLIES)
+        rate_state.last_message = message_text
+        rate_state.last_response = reply
+        return reply
 
     # Кэш последнего ответа на повторный вопрос
     if rate_state.last_message and rate_state.last_message == message_text and rate_state.last_response:

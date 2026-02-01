@@ -98,7 +98,7 @@ class TestAIService:
             
             reply = await ai_service.generate_reply("Test", [])
             
-            assert "слишком много времени" in reply
+            assert "медленнее" in reply
     
     @pytest.mark.asyncio
     async def test_generate_reply_http_error_429(self, ai_service):
@@ -187,10 +187,10 @@ class TestGenerateAIReply:
             mock_instance.sync_generate_reply.return_value = "AI ответ"
             mock_service.return_value = mock_instance
             
-            result = generate_ai_reply(123, "Привет", [])
+            result = generate_ai_reply(123, "Расскажи, как помочь", [])
             
             assert result == "AI ответ"
-            mock_instance.sync_generate_reply.assert_called_once_with("Привет", [], "123")
+            mock_instance.sync_generate_reply.assert_called_once_with("Расскажи, как помочь", [], "123")
     
     def test_generate_ai_reply_with_history(self):
         """Позитивный: с историей диалога"""

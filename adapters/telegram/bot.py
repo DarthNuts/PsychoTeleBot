@@ -2,6 +2,7 @@
 import logging
 import os
 from telegram import Update, BotCommand
+from telegram.constants import ChatAction
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from application.bot_service import BotService
 from application.state_machine import StateMachine
@@ -118,6 +119,8 @@ class TelegramBot:
         message = update.message.text
         
         logger.info(f"User {user_id} ({username}): {message}")
+
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
         
         response = self.bot_service.process_message(
             user_id, message, username, first_name, last_name
