@@ -44,7 +44,7 @@ class TestAIService:
         
         assert len(messages) == 1
         assert messages[0]["role"] == "system"
-        assert "психологической помощи" in messages[0]["content"]
+        assert "психологической поддержки" in messages[0]["content"]
     
     def test_build_messages_with_history(self, ai_service):
         """Позитивный: построение сообщений с историей"""
@@ -190,7 +190,7 @@ class TestGenerateAIReply:
             result = generate_ai_reply(123, "Привет", [])
             
             assert result == "AI ответ"
-            mock_instance.sync_generate_reply.assert_called_once_with("Привет", [])
+            mock_instance.sync_generate_reply.assert_called_once_with("Привет", [], "123")
     
     def test_generate_ai_reply_with_history(self):
         """Позитивный: с историей диалога"""
@@ -207,6 +207,7 @@ class TestGenerateAIReply:
             result = generate_ai_reply(456, "Второе сообщение", history)
             
             assert result == "Второй ответ"
+            mock_instance.sync_generate_reply.assert_called_once_with("Второе сообщение", history, "456")
     
     def test_generate_ai_reply_error_handling(self):
         """Негативный: обработка ошибки"""
@@ -228,13 +229,13 @@ class TestSystemPrompt:
         """Позитивный: проверка содержания system prompt"""
         prompt = AIService.SYSTEM_PROMPT
         
-        assert "психологической помощи" in prompt
-        assert "эмпатично" in prompt
+        assert "психологической поддержки" in prompt
         assert "по-русски" in prompt
         assert "диагнозы" in prompt
-        assert "врачом" in prompt
-        assert "кризиса" in prompt
-        assert "специалист" in prompt
+        assert "врач" in prompt
+        assert "категоричных" in prompt
+        assert "самопомощи" in prompt
+        assert "кризис" in prompt
     
     def test_fallback_response(self):
         """Позитивный: проверка fallback ответа"""

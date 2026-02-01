@@ -1,6 +1,6 @@
 from typing import Tuple
 from domain.models import State, UserSession, Severity
-from application.ai_service import generate_ai_reply
+from application.ai_service import generate_ai_reply, clear_user_memory, clear_user_rate_state
 import logging
 
 logger = logging.getLogger(__name__)
@@ -83,6 +83,8 @@ class StateMachine:
 
         if message.strip().lower() in ['/clear', 'clear'] and session.state == State.AI_CHAT:
             session.clear_ai_context()
+            clear_user_memory(session.user_id)
+            clear_user_rate_state(session.user_id)
             return session, "🗑️ Контекст диалога очищен.\n\n" + self.AI_CHAT_TEXT
 
         # Приветствие при старте
