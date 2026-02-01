@@ -10,7 +10,7 @@ from infrastructure.sqlite_repositories import (
     SQLiteTicketRepository, 
     SQLiteRoleRepository
 )
-from domain.roles import RoleManager
+from domain.roles import RoleManager, UserRole
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -32,8 +32,17 @@ class TelegramBot:
         # Инициализируем RoleManager с админами
         role_manager = RoleManager(admin_ids=admin_ids)
         
-        # Загружаем существующие роли из БД
+        # Загружаем существующие роли из БД и синхронизируем админов с .env
         for user_profile in role_repo.get_all_users():
+            # Если пользователь был админом в БД, но его нет в ADMIN_IDS — снимаем админку
+            if user_profile.role == UserRole.ADMIN and user_profile.user_id not in admin_ids:
+                user_profile.role = UserRole.USER
+                role_repo.save_user(user_profile)
+            # Если пользователь в ADMIN_IDS, но роль не admin — повышаем
+            elif user_profile.user_id in admin_ids and user_profile.role != UserRole.ADMIN:
+                user_profile.role = UserRole.ADMIN
+                role_repo.save_user(user_profile)
+
             role_manager.users[user_profile.user_id] = user_profile
         
         state_machine = StateMachine()

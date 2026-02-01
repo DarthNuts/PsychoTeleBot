@@ -1,5 +1,9 @@
 from typing import Tuple
 from domain.models import State, UserSession, Severity
+from application.ai_service import generate_ai_reply
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class StateMachine:
@@ -179,15 +183,32 @@ class StateMachine:
         return session, response
 
     def _handle_ai_chat(self, session: UserSession, message: str) -> Tuple[UserSession, str]:
-        """Обработка чата с ИИ (заглушка)"""
-        # Добавляем сообщение в контекст
+        """Обработка чата с ИИ"""
+        # Добавляем сообщение пользователя в контекст
         session.ai_context.append({"role": "user", "content": message})
         
-        # Заглушка ответа ИИ
-        ai_response = f"🤖 [Заглушка ИИ] Вы написали: {message}\n\nЭто место для интеграции с реальным ИИ."
-        session.ai_context.append({"role": "assistant", "content": ai_response})
-        
-        return session, ai_response
+        try:
+            # Генерируем ответ через AI API
+            ai_response = generate_ai_reply(
+                user_id=session.user_id,
+                user_message=message,
+                history=session.ai_context[:-1]  # Передаем историю без последнего сообщения
+            )
+            
+            # Добавляем ответ AI в контекст
+            session.ai_context.append({"role": "assistant", "content": ai_response})
+            
+            # Ограничиваем историю последними 20 сообщениями (10 пар)
+            if len(session.ai_context) > 20:
+                session.ai_context = session.ai_context[-20:]
+            
+            return session, ai_response
+            
+        except Exception as e:
+            logger.error(f"Error in AI chat handler: {type(e).__name__} - {str(e)[:100]}")
+            fallback = "Извините, произошла ошибка при обработке вашего сообщения. Пожалуйста, попробуйте еще раз."
+            session.ai_context.append({"role": "assistant", "content": fallback})
+            return session, fallback
 
     def _handle_terms(self, session: UserSession, message: str) -> Tuple[UserSession, str]:
         """Обработка экрана условий"""
