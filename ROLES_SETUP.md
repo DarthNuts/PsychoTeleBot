@@ -173,6 +173,8 @@ sqlite3 bot_data.db "SELECT * FROM user_roles;"
 
 ## Дополнительная информация
 
-- [Основная документация](README.md)
 - [Быстрый старт](QUICKSTART.md)
+- [Возможности бота](INSTRUCTIONS.md)
+- [Настройка ИИ](OPENROUTER_SETUP.md)
 - [Настройка Telegram](TELEGRAM_SETUP.md)
+- [Основная документация](README.md)

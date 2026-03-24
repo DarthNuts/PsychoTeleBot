@@ -2,7 +2,7 @@
 
 Telegram-бот для психологической поддержки с офлайн-отладкой (Clean Architecture).
 
-📚 **[Полный индекс документации →](DOCS_INDEX.md)**
+📚 **[Полный индекс документации →](DOCS_INDEX.md)** | **[Быстрый старт →](QUICKSTART.md)** | **[Возможности бота →](INSTRUCTIONS.md)**
 
 ---
 
@@ -14,11 +14,17 @@ PsychoTeleBot — это бот для Telegram, предназначенный 
 
 - 🏠 **Главное меню** с выбором действий
 - 👨‍⚕️ **Консультация со специалистом** — создание заявки с полной формой
-- 🤖 **Консультация с ИИ** — чат с ИИ-ассистентом (заглушка)
+- 💬 **Чат психолог–пользователь** — двусторонний чат через бота
+- 🤖 **Консультация с ИИ** — чат с ИИ-ассистентом (OpenRouter)
 - 📋 **Условия обращения** — отображение политики конфиденциальности
 - ❓ **Вопрос по психологии** — быстрые вопросы
 - 🔄 **Команда /menu** — возврат в меню из любого состояния
 - 🗑️ **Команда /clear** — очистка контекста ИИ-чата
+- 👨‍⚕️ **Роль психолога** — управление заявками, чат с пользователями
+- 🔧 **Роль администратора** — управление психологами, назначение заявок
+- 💾 **SQLite хранилище** — данные сохраняются между перезапусками
+
+📖 **Полное описание возможностей:** [INSTRUCTIONS.md](INSTRUCTIONS.md)
 
 ## Архитектура
 
@@ -28,20 +34,28 @@ PsychoTeleBot — это бот для Telegram, предназначенный 
 PsychoTeleBot/
 ├── domain/              # Бизнес-логика и модели
 │   ├── models.py        # Доменные модели (State, Ticket, UserSession)
-│   └── repositories.py  # Интерфейсы репозиториев
+│   ├── repositories.py  # Интерфейсы репозиториев
+│   └── roles.py         # Роли (UserRole)
 ├── application/         # Use cases и бизнес-процессы
 │   ├── state_machine.py # State Machine для управления состояниями
-│   └── bot_service.py   # Основной сервис бота
+│   ├── bot_service.py   # Основной сервис бота
+│   └── ai_service.py    # Интеграция с OpenRouter (LLM)
 ├── infrastructure/      # Реализации репозиториев
-│   └── in_memory_repositories.py
+│   ├── in_memory_repositories.py  # Для тестов
+│   └── sqlite_repositories.py    # SQLite (production)
 ├── adapters/            # Адаптеры для внешнего мира
-│   └── cli/             # CLI адаптер для отладки
-│       ├── __main__.py
-│       └── runner.py
-└── tests/               # Тесты
+│   ├── cli/             # CLI адаптер для отладки
+│   └── telegram/        # Telegram адаптер (production)
+│       ├── bot.py       # Обработчики команд
+│       └── run.py       # Точка запуска
+└── tests/               # 171 тест (100%)
     ├── test_models.py
     ├── test_state_machine.py
-    └── test_bot_service.py
+    ├── test_bot_service.py
+    ├── test_admin_commands.py
+    ├── test_ai_service.py
+    ├── test_roles.py
+    └── test_ticket_assignment.py
 ```
 
 ## Установка
@@ -95,7 +109,7 @@ pip install -r requirements.txt
    ./run_telegram.sh # Linux/Mac
    ```
 
-📖 **Подробная инструкция:** [TELEGRAM_SETUP.md](TELEGRAM_SETUP.md)
+📖 **Подробная инструкция:** [TELEGRAM_SETUP.md](TELEGRAM_SETUP.md) | **Настройка ИИ:** [OPENROUTER_SETUP.md](OPENROUTER_SETUP.md) | **Роли:** [ROLES_SETUP.md](ROLES_SETUP.md)
 
 ### Режим 2: CLI Debug Mode (офлайн-отладка)
 
@@ -171,20 +185,33 @@ pytest tests/test_bot_service.py::test_consultation_full_flow -v
 
 Бот использует конечный автомат (State Machine) для управления состояниями:
 
-### Состояния:
+### Состояния пользователя:
 - `MENU` — главное меню
-- `CONSULT_FORM_TOPIC` — ввод темы консультации
-- `CONSULT_FORM_GENDER` — ввод пола
-- `CONSULT_FORM_AGE` — ввод возраста
-- `CONSULT_FORM_SEVERITY` — выбор критичности
-- `CONSULT_FORM_MESSAGE` — ввод сообщения
+- `CONSULT_FORM_*` — форма заявки (5 шагов: тема, пол, возраст, критичность, сообщение)
 - `AI_CHAT` — чат с ИИ
 - `TERMS` — условия обращения
 - `PSY_QUESTION` — вопрос по психологии
+- `USER_IN_CHAT` — чат с психологом
+
+### Состояния психолога:
+- `PSY_MENU` — меню психолога
+- `PSY_TICKETS_LIST` / `PSY_MY_TICKETS` — списки заявок
+- `PSY_TICKET_OPEN` — просмотр заявки
+- `PSY_TICKET_CHAT` — чат с пользователем
+- `PSY_CHANGE_STATUS` — смена статуса
+
+### Состояния админа:
+- `ADMIN_MENU` — меню админа
+- `ADMIN_MANAGE_PSYCHOLOGISTS` — управление психологами
+- `ADMIN_PROMOTE_PSYCHO` / `ADMIN_DEMOTE_PSYCHO_SELECT` — назначение/снятие психологов
+- `ADMIN_ASSIGN_TICKET_SELECT` / `ADMIN_ASSIGN_PSYCHO_SELECT` — назначение заявок
+
+Всего: **27 состояний**. Полное описание: [INSTRUCTIONS.md](INSTRUCTIONS.md)
 
 ### Глобальные команды:
-- `/menu` — работает из любого состояния, возвращает в меню
-- `/clear` — очищает контекст в состоянии `AI_CHAT`
+- `/menu` — возврат в меню из любого состояния
+- `/clear` — очистка контекста ИИ
+- `/end` — завершение чата психолог–пользователь
 
 ## Модели данных
 
@@ -233,11 +260,10 @@ python -m adapters.telegram.run
 - Деплой на сервер (Docker, Heroku, systemd)
 - Решение проблем
 
-### Добавление базы данных
+### База данных
 
-1. Реализуйте `SessionRepository` и `TicketRepository` для вашей БД
-2. Создайте файл в `infrastructure/` (например, `sqlite_repositories.py`)
-3. Замените `InMemoryRepositories` на реализацию с БД
+✅ **Реализовано!** SQLite-хранилище в `infrastructure/sqlite_repositories.py`.
+Данные сохраняются в `bot_data.db` между перезапусками бота.
 
 ## Тестирование
 

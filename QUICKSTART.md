@@ -1,228 +1,82 @@
 # Быстрый старт PsychoTeleBot
 
-## ⚡ Режим работы
+## Требования
 
-### 🔥 Режим 1: Telegram Bot (для реального использования)
+- Python 3.11+
+- Telegram-аккаунт
 
-Полная инструкция: **[TELEGRAM_SETUP.md](TELEGRAM_SETUP.md)**
+---
 
-Быстрые шаги:
-```bash
-# 1. Создайте бота через @BotFather и получите токен
-# 2. Установите зависимости
-pip install -r requirements-telegram.txt
+## 1. Создайте бота в Telegram
 
-# 3. Создайте .env с токеном
-echo "TELEGRAM_BOT_TOKEN=ваш_токен" > .env
+1. Откройте [@BotFather](https://t.me/botfather) в Telegram
+2. Отправьте `/newbot`, задайте имя и username (должен заканчиваться на `bot`)
+3. Скопируйте полученный **токен**
 
-# 4. Запустите
-python -m adapters.telegram.run
-# или run_telegram.bat (Windows) / ./run_telegram.sh (Linux)
-```
+---
 
-### 🧪 Режим 2: CLI Debug (для разработки и тестирования)
+## 2. Установите зависимости
 
-## ⚡ Быстрая установка и запуск (3 минуты)
-
-### 1. Установка зависимостей
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Запуск тестов
+---
+
+## 3. Настройте .env
+
+Скопируйте шаблон и заполните:
+
 ```bash
-pytest -v
+cp .env.example .env
 ```
-Ожидаемый результат: `32 passed` ✅
 
-### 3. Запуск демо
+Откройте `.env` и укажите:
+
+```env
+# Обязательно: токен бота от @BotFather
+TELEGRAM_BOT_TOKEN=ваш_токен
+
+# Обязательно: ваш Telegram ID (для доступа к админ-панели)
+# Узнать ID: отправьте /start боту @userinfobot
+ADMIN_IDS=ваш_telegram_id
+
+# Обязательно: ключ API OpenRouter (https://openrouter.ai/keys)
+OPENROUTER_API_KEY=sk-or-v1-ваш_ключ
+
+# Модель ИИ (по умолчанию бесплатная)
+OPENROUTER_MODEL=arcee-ai/trinity-large-preview:free
+```
+
+---
+
+## 4. Запустите бота
+
+**Windows:**
 ```bash
-python demo.py
+.\run_telegram.bat
 ```
 
-### 4. Запуск интерактивного CLI
+**Linux / Mac:**
 ```bash
-python -m adapters.cli
+python -m adapters.telegram.run
 ```
 
-Или (для Windows):
-```bash
-run_cli.bat
-```
+---
 
-Или (для Linux/Mac):
-```bash
-./run_cli.sh
-```
+## 5. Проверьте работу
 
-## 🎮 Основные команды CLI
+1. Найдите бота в Telegram по username
+2. Отправьте `/start` — появится главное меню
+3. Отправьте `/help` — справка по командам
 
-В интерактивном режиме доступны:
+---
 
-- `/start` — начать диалог с ботом
-- `/menu` — вернуться в главное меню
-- `/clear` — очистить контекст ИИ (только в режиме AI_CHAT)
-- `/reset` — сбросить текущую сессию
-- `/user <id>` — сменить пользователя (для тестирования мультипользовательского режима)
-- `/tickets` — показать все созданные заявки
-- `/quit` — выход из CLI
+## Что дальше
 
-## 📋 Сценарии использования
-
-### Сценарий 1: Создание заявки на консультацию
-
-```
-[test_user_1] > /start
-[test_user_1] > 1                    # Выбрать "Консультация со специалистом"
-[test_user_1] > Депрессия            # Тема
-[test_user_1] > Мужской              # Пол
-[test_user_1] > 30                   # Возраст
-[test_user_1] > 3                    # Критичность (Высокая)
-[test_user_1] > Нужна помощь         # Описание проблемы
-[test_user_1] > /tickets             # Посмотреть созданную заявку
-```
-
-### Сценарий 2: Чат с ИИ
-
-```
-[test_user_1] > /start
-[test_user_1] > 2                    # Выбрать "Консультация с ИИ"
-[test_user_1] > Привет, как справиться со стрессом?
-[test_user_1] > А что насчет медитации?
-[test_user_1] > /clear               # Очистить контекст
-[test_user_1] > Новый вопрос
-[test_user_1] > /menu                # Вернуться в меню
-```
-
-### Сценарий 3: Возврат в меню из формы
-
-```
-[test_user_1] > /start
-[test_user_1] > 1                    # Начать заполнение формы
-[test_user_1] > Тревога
-[test_user_1] > /menu                # Прервать заполнение и вернуться в меню
-```
-
-### Сценарий 4: Несколько пользователей
-
-```
-[test_user_1] > /start
-[test_user_1] > 1
-[test_user_1] > Тема 1
-
-[test_user_1] > /user test_user_2    # Сменить пользователя
-[test_user_2] > 1
-[test_user_2] > Тема 2
-
-[test_user_2] > /user test_user_1    # Вернуться к первому пользователю
-[test_user_1] > Женский              # Продолжить с того же места
-```
-
-## 🧪 Запуск тестов
-
-### Все тесты
-```bash
-pytest -v
-```
-
-### Конкретный файл
-```bash
-pytest tests/test_bot_service.py -v
-```
-
-### Конкретный тест
-```bash
-pytest tests/test_bot_service.py::test_consultation_full_flow -v
-```
-
-### С покрытием (требует pytest-cov)
-```bash
-pip install pytest-cov
-pytest --cov=. --cov-report=html
-```
-
-## 📊 Проверка функциональности
-
-### Быстрая проверка всех функций:
-```bash
-python demo.py
-```
-
-Этот скрипт продемонстрирует:
-- ✅ Полный процесс создания консультации
-- ✅ Работу с ИИ-чатом
-- ✅ Очистку контекста
-- ✅ Возврат в меню из любого состояния
-
-## 🔍 Отладка
-
-### Проверка состояния сессии
-В CLI можно использовать команду `/tickets` для просмотра всех заявок и их состояния.
-
-### Логирование
-Для добавления логирования можно использовать встроенный модуль `logging`:
-
-```python
-import logging
-
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
-
-# В коде:
-logger.debug(f"Processing message: {message}")
-```
-
-## 🚀 Следующие шаги
-
-1. **Изучите архитектуру:**
-   ```bash
-   cat ARCHITECTURE.md  # Linux/Mac
-   type ARCHITECTURE.md # Windows
-   ```
-
-2. **Прочитайте основную документацию:**
-   ```bash
-   cat README.md  # Linux/Mac
-   type README.md # Windows
-   ```
-
-3. **Посмотрите код:**
-   - `domain/models.py` — модели данных
-   - `application/state_machine.py` — логика переходов
-   - `application/bot_service.py` — главный сервис
-   - `tests/` — примеры использования
-
-4. **Добавьте свои фичи:**
-   - Новые состояния в State Machine
-   - Новые команды
-   - Интеграцию с реальным ИИ API
-   - Telegram адаптер
-   - Базу данных (SQLite, PostgreSQL)
-
-## 💡 Полезные ссылки
-
-- [README.md](README.md) — основная документация
-- [ARCHITECTURE.md](ARCHITECTURE.md) — архитектура проекта
-- [map.mermaid](map.mermaid) — схема флоу бота
-- [copilot_telegram_bot_prompt.md](copilot_telegram_bot_prompt.md) — исходное задание
-
-## ❓ Часто задаваемые вопросы
-
-### Q: Как добавить Telegram бота?
-A: Создайте адаптер в `adapters/telegram/` и используйте `BotService` для обработки сообщений. Пример в [ARCHITECTURE.md](ARCHITECTURE.md).
-
-### Q: Как изменить хранилище с in-memory на базу данных?
-A: Реализуйте `SessionRepository` и `TicketRepository` для вашей БД в `infrastructure/`. Примеры в [ARCHITECTURE.md](ARCHITECTURE.md).
-
-### Q: Как добавить новое состояние?
-A: 1) Добавьте в enum `State`, 2) Создайте обработчик в `StateMachine`, 3) Зарегистрируйте в `handlers`.
-
-### Q: Почему тесты падают?
-A: Убедитесь, что установили зависимости: `pip install -r requirements.txt`
-
-### Q: Как запустить в production?
-A: Добавьте Telegram адаптер, замените in-memory репозитории на постоянное хранилище (SQLite/PostgreSQL), добавьте обработку ошибок и логирование.
-
-## 🎉 Готово!
-
-Теперь вы готовы к работе с PsychoTeleBot. Удачи! 🚀
+- **Добавить психолога** — зайдите в админ-панель (пункт «Управление психологами») и укажите Telegram ID специалиста
+- **Полное описание возможностей** — [INSTRUCTIONS.md](INSTRUCTIONS.md)
+- **Настройка ИИ (OpenRouter)** — [OPENROUTER_SETUP.md](OPENROUTER_SETUP.md)
+- **Настройка ролей** — [ROLES_SETUP.md](ROLES_SETUP.md)
+- **Настройка Telegram-бота подробнее** — [TELEGRAM_SETUP.md](TELEGRAM_SETUP.md)
+- **Запуск тестов** — `pytest -v`

@@ -2,16 +2,19 @@
 
 ## Выберите ваш путь:
 
-### 1️⃣ Хочу запустить Telegram бота прямо сейчас (5 минут)
-→ **[TELEGRAM_QUICK.md](TELEGRAM_QUICK.md)**
-
-### 2️⃣ Хочу изучить проект и попробовать CLI
+### 1️⃣ Хочу запустить бота
 → **[QUICKSTART.md](QUICKSTART.md)**
 
-### 3️⃣ Нужна полная документация
+### 2️⃣ Хочу узнать все возможности бота
+→ **[INSTRUCTIONS.md](INSTRUCTIONS.md)**
+
+### 3️⃣ Хочу настроить ИИ (OpenRouter)
+→ **[OPENROUTER_SETUP.md](OPENROUTER_SETUP.md)**
+
+### 4️⃣ Нужна полная документация
 → **[DOCS_INDEX.md](DOCS_INDEX.md)** - индекс всех документов
 
-### 4️⃣ Хочу подробную инструкцию по Telegram
+### 5️⃣ Хочу подробную инструкцию по Telegram
 → **[TELEGRAM_SETUP.md](TELEGRAM_SETUP.md)**
 
 ---
@@ -20,14 +23,16 @@
 
 | Файл | Описание | Для кого |
 |------|----------|----------|
+| [QUICKSTART.md](QUICKSTART.md) | Быстрый старт | Все |
+| [INSTRUCTIONS.md](INSTRUCTIONS.md) | Полное описание возможностей | Все |
+| [OPENROUTER_SETUP.md](OPENROUTER_SETUP.md) | Получение API-ключа ИИ | Настройка |
+| [ROLES_SETUP.md](ROLES_SETUP.md) | Настройка ролей | Админы |
 | [TELEGRAM_QUICK.md](TELEGRAM_QUICK.md) | Запуск в Telegram за 5 минут | Все |
 | [TELEGRAM_SETUP.md](TELEGRAM_SETUP.md) | Полная инструкция по Telegram | Production деплой |
-| [README.md](README.md) | Основная документация | Все |
-| [QUICKSTART.md](QUICKSTART.md) | Быстрый старт | Новички |
+| [README.md](README.md) | Основная документация | Разработчики |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Архитектура проекта | Разработчики |
 | [CHEATSHEET.md](CHEATSHEET.md) | Шпаргалка команд | Все |
 | [DOCS_INDEX.md](DOCS_INDEX.md) | Индекс документации | Навигация |
-| [COMPLETION_REPORT.md](COMPLETION_REPORT.md) | Отчет о выполнении | Менеджеры |
 
 ---
 
@@ -54,4 +59,4 @@ pytest -v
 ---
 
 **Время чтения:** 1 минута  
-**Начните с:** [TELEGRAM_QUICK.md](TELEGRAM_QUICK.md) или [QUICKSTART.md](QUICKSTART.md)
+**Начните с:** [QUICKSTART.md](QUICKSTART.md) или [INSTRUCTIONS.md](INSTRUCTIONS.md)

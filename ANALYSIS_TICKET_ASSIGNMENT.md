@@ -121,7 +121,7 @@ session.selected_ticket_id = row_dict.get('selected_ticket_id')
 
 ### ✅ Результаты тестирования
 ```
-103 тестов пройдено за 0.18 сек (100% success rate)
+171 тест пройден (100% success rate)
 ```
 
 ### Структура тестов:

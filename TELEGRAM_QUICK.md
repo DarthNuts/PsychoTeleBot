@@ -174,9 +174,11 @@ pip install -r requirements-telegram.txt --upgrade
 
 ## 📚 Дальнейшие шаги
 
-- **Полная инструкция**: [TELEGRAM_SETUP.md](TELEGRAM_SETUP.md)
+- **Возможности бота**: [INSTRUCTIONS.md](INSTRUCTIONS.md)
+- **Настройка ИИ**: [OPENROUTER_SETUP.md](OPENROUTER_SETUP.md)
+- **Настройка ролей**: [ROLES_SETUP.md](ROLES_SETUP.md)
+- **Полная инструкция Telegram**: [TELEGRAM_SETUP.md](TELEGRAM_SETUP.md)
 - **Деплой на сервер**: [TELEGRAM_SETUP.md#6-деплой](TELEGRAM_SETUP.md#6-деплой)
-- **Добавить БД**: [TELEGRAM_SETUP.md](TELEGRAM_SETUP.md#добавление-бд-sqlite)
 
 ---
 

@@ -1,7 +1,7 @@
 # 🤖 PsychoTeleBot
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-32%20passed-success)](tests/)
+[![Tests](https://img.shields.io/badge/tests-171%20passed-success)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **Telegram-бот для психологической поддержки** с офлайн-отладкой на основе Clean Architecture.
@@ -28,13 +28,15 @@ python -m adapters.cli
 
 ## 📚 Документация
 
-🎯 **Начните здесь:** [START_HERE.md](START_HERE.md)
+🎯 **Начните здесь:** [QUICKSTART.md](QUICKSTART.md)
 
 | Документ | Описание |
 |----------|----------|
-| **[TELEGRAM_QUICK.md](TELEGRAM_QUICK.md)** | Запуск в Telegram за 5 минут |
-| **[TELEGRAM_SETUP.md](TELEGRAM_SETUP.md)** | Полная инструкция + деплой |
-| **[QUICKSTART.md](QUICKSTART.md)** | Быстрый старт и примеры |
+| **[QUICKSTART.md](QUICKSTART.md)** | Быстрый старт |
+| **[INSTRUCTIONS.md](INSTRUCTIONS.md)** | Полное описание возможностей |
+| **[OPENROUTER_SETUP.md](OPENROUTER_SETUP.md)** | Настройка ИИ (OpenRouter) |
+| **[ROLES_SETUP.md](ROLES_SETUP.md)** | Настройка ролей |
+| **[TELEGRAM_SETUP.md](TELEGRAM_SETUP.md)** | Полная инструкция Telegram + деплой |
 | **[ARCHITECTURE.md](ARCHITECTURE.md)** | Архитектура проекта |
 | **[DOCS_INDEX.md](DOCS_INDEX.md)** | Полный индекс документов |
 
@@ -43,10 +45,11 @@ python -m adapters.cli
 ## 🎯 Возможности
 
 - ✅ **Консультация со специалистом** — форма с заявкой
-- ✅ **ИИ-консультант** — чат с контекстом
-- ✅ **Вопросы по психологии**
-- ✅ **Анонимность**
-- ✅ **Управление заявками**
+- ✅ **ИИ-консультант** — чат с контекстом (OpenRouter)
+- ✅ **Чат психолог–пользователь** — двусторонний чат через бота
+- ✅ **Роли** — пользователь, психолог, администратор
+- ✅ **Управление заявками** с пагинацией
+- ✅ **SQLite хранилище** — сохранение между перезапусками
 - ✅ **Офлайн-отладка** без Telegram API
 
 ---
@@ -56,10 +59,10 @@ python -m adapters.cli
 ```
 PsychoTeleBot/
 ├── domain/           # Бизнес-логика
-├── application/      # Use cases
-├── infrastructure/   # Репозитории
+├── application/      # Use cases + AI Service
+├── infrastructure/   # SQLite + In-Memory репозитории
 ├── adapters/         # CLI & Telegram
-└── tests/           # 32 теста (100%)
+└── tests/            # 171 тест (100%)
 ```
 
 **Clean Architecture** → Полная независимость от фреймворков
@@ -70,7 +73,7 @@ PsychoTeleBot/
 
 ```bash
 pytest -v
-# 32 passed in 0.11s ✅
+# 171 passed ✅
 ```
 
 ---
