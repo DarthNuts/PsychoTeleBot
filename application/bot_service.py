@@ -1,5 +1,6 @@
 from typing import Optional
 from datetime import datetime
+import hashlib
 import uuid
 
 from domain.models import UserSession, Ticket, State, TicketStatus
@@ -10,6 +11,11 @@ from application.state_machine import StateMachine
 
 class BotService:
     """Основной сервис бота, координирующий все операции"""
+
+    @staticmethod
+    def _short_ticket_id(ticket_id: str, length: int = 6) -> str:
+        """Короткий хеш заявки для отображения в чате"""
+        return hashlib.sha256(ticket_id.encode()).hexdigest()[:length].upper()
 
     def __init__(
         self,
@@ -24,6 +30,7 @@ class BotService:
         self.state_machine = state_machine
         self.role_manager = role_manager or RoleManager()
         self.role_repo = role_repo
+        self.pending_notifications: list[tuple[str, str]] = []  # [(user_id, message), ...]
 
     def process_message(self, user_id: str, message: str, 
                        username: str = None, first_name: str = None, 
@@ -68,7 +75,11 @@ class BotService:
             session, response = self._handle_psychologist_message(session, message, user_id)
         else:
             # Обычный пользователь
-            session, response = self.state_machine.process(session, message)
+            # Проверяем, есть ли у пользователя активный чат с психологом
+            if session.state == State.USER_IN_CHAT and session.active_chat_ticket_id:
+                session, response = self._handle_user_in_chat(session, message)
+            else:
+                session, response = self.state_machine.process(session, message)
         
         # Если завершили форму консультации, создаем заявку
         if (previous_state == State.CONSULT_FORM_MESSAGE and 
@@ -409,64 +420,347 @@ class BotService:
         
         return session, "❌ Неизвестная команда"
 
-    def _handle_psychologist_message(self, session: UserSession, message: str, user_id: str) -> tuple:
-        """Обработка сообщений психолога"""
-        message_lower = message.strip().lower()
-        
-        # Обработка глобальных команд
-        if message_lower == '/menu':
-            session.state = State.MENU
-            return session, "Возврат в обычное меню"
-        
-        if session.state == State.MENU or message_lower in ['/start', 'start']:
-            session.state = State.PSY_MENU
-            response = """🧑‍⚕️ *ПАНЕЛЬ ПСИХОЛОГА*
+    _PSY_MENU_TEXT = """🧑‍⚕️ *ПАНЕЛЬ ПСИХОЛОГА*
 
 Выберите действие:
 1️⃣ Очередь заявок
 2️⃣ Мои заявки
-3️⃣ Обычное меню
 
 Команды:
-/menu - вернуться в обычное меню"""
-            return session, response
+/menu - меню психолога"""
+
+    def _handle_psychologist_message(self, session: UserSession, message: str, user_id: str) -> tuple:
+        """Обработка сообщений психолога"""
+        message_lower = message.strip().lower()
+        
+        # Если психолог в режиме чата — обрабатываем до глобальных команд
+        if session.state == State.PSY_TICKET_CHAT:
+            return self._handle_psy_chat_message(session, message, message_lower, user_id)
+        
+        # /menu и /start всегда возвращают в панель психолога
+        if message_lower in ['/menu', 'menu', '/start', 'start'] or session.state == State.MENU:
+            session.state = State.PSY_MENU
+            return session, self._PSY_MENU_TEXT
         
         elif session.state == State.PSY_MENU:
             if message_lower in ['1', 'очередь заявок']:
-                session.state = State.PSY_TICKETS_LIST
-                tickets = [t for t in self.ticket_repo.get_all() 
+                tickets = [t for t in self.ticket_repo.get_all()
                           if t.status in (TicketStatus.NEW, TicketStatus.WAITING_RESPONSE)]
                 
                 if not tickets:
-                    response = "✅ Нет заявок в очереди"
                     session.state = State.PSY_MENU
-                else:
-                    response = "📋 Заявки:\n"
-                    for i, t in enumerate(tickets[:5], 1):
-                        response += f"\n{i}. {t.id[:8]} - {t.topic} ({t.severity.value})"
-                        response += f"\n   От: {t.user_id}"
+                    return session, "✅ Нет заявок в очереди"
                 
-                return session, response
+                session.state = State.PSY_TICKETS_LIST
+                session.pagination_offset = 0
+                return session, self._render_psy_queue_page(tickets, 0)
             
             elif message_lower in ['2', 'мои заявки']:
-                tickets = [t for t in self.ticket_repo.get_all() 
+                tickets = [t for t in self.ticket_repo.get_all()
                           if t.assigned_to == user_id]
                 
                 if not tickets:
-                    response = "Вы не брали в работу ни одну заявку"
-                else:
-                    response = "📋 Ваши заявки:\n"
-                    for t in tickets:
-                        response += f"\n• {t.id[:8]} - {t.topic} ({t.status.value})"
+                    return session, "📋 У вас нет заявок в работе"
                 
+                session.state = State.PSY_MY_TICKETS
+                session.pagination_offset = 0
+                return session, self._render_psy_my_tickets_page(tickets, 0)
+        
+        elif session.state == State.PSY_TICKETS_LIST:
+            tickets = [t for t in self.ticket_repo.get_all()
+                      if t.status in (TicketStatus.NEW, TicketStatus.WAITING_RESPONSE)]
+            
+            if message_lower in ['exit', 'отмена', '0']:
+                session.state = State.PSY_MENU
+                return session, self._PSY_MENU_TEXT
+            
+            elif message_lower in ['next', 'далее', 'следующие']:
+                session.pagination_offset += 10
+                if session.pagination_offset >= len(tickets):
+                    session.pagination_offset -= 10
+                    return session, "✅ Это последняя страница"
+                return session, self._render_psy_queue_page(tickets, session.pagination_offset)
+            
+            elif message_lower in ['prev', 'назад', 'предыдущие']:
+                session.pagination_offset = max(0, session.pagination_offset - 10)
+                return session, self._render_psy_queue_page(tickets, session.pagination_offset)
+            
+            else:
+                try:
+                    ticket_num = int(message.strip())
+                    if 1 <= ticket_num <= 10:
+                        idx = session.pagination_offset + ticket_num - 1
+                        if idx < len(tickets):
+                            session.selected_ticket_id = tickets[idx].id
+                            session.state = State.PSY_TICKET_OPEN
+                            return session, self._render_psy_ticket_card(tickets[idx], user_id)
+                        return session, "❌ Заявка не найдена"
+                except ValueError:
+                    pass
+                return session, "❌ Введите номер заявки (1-10) или команду (далее/назад/отмена)"
+        
+        elif session.state == State.PSY_MY_TICKETS:
+            tickets = [t for t in self.ticket_repo.get_all()
+                      if t.assigned_to == user_id]
+            
+            if message_lower in ['exit', 'отмена', '0']:
+                session.state = State.PSY_MENU
+                return session, self._PSY_MENU_TEXT
+            
+            elif message_lower in ['next', 'далее', 'следующие']:
+                session.pagination_offset += 10
+                if session.pagination_offset >= len(tickets):
+                    session.pagination_offset -= 10
+                    return session, "✅ Это последняя страница"
+                return session, self._render_psy_my_tickets_page(tickets, session.pagination_offset)
+            
+            elif message_lower in ['prev', 'назад', 'предыдущие']:
+                session.pagination_offset = max(0, session.pagination_offset - 10)
+                return session, self._render_psy_my_tickets_page(tickets, session.pagination_offset)
+            
+            else:
+                try:
+                    ticket_num = int(message.strip())
+                    if 1 <= ticket_num <= 10:
+                        idx = session.pagination_offset + ticket_num - 1
+                        if idx < len(tickets):
+                            session.selected_ticket_id = tickets[idx].id
+                            session.state = State.PSY_TICKET_OPEN
+                            return session, self._render_psy_ticket_card(tickets[idx], user_id)
+                        return session, "❌ Заявка не найдена"
+                except ValueError:
+                    pass
+                return session, "❌ Введите номер заявки (1-10) или команду (далее/назад/отмена)"
+        
+        elif session.state == State.PSY_TICKET_OPEN:
+            ticket = self.ticket_repo.get(session.selected_ticket_id) if session.selected_ticket_id else None
+            
+            if message_lower in ['0', 'назад', 'назад к списку']:
+                # Возвращаемся в тот список, откуда пришли
+                if ticket and ticket.assigned_to == user_id:
+                    my_tickets = [t for t in self.ticket_repo.get_all() if t.assigned_to == user_id]
+                    if my_tickets:
+                        session.state = State.PSY_MY_TICKETS
+                        session.pagination_offset = 0
+                        session.selected_ticket_id = None
+                        return session, self._render_psy_my_tickets_page(my_tickets, 0)
+                # По умолчанию — в очередь
+                queue = [t for t in self.ticket_repo.get_all()
+                         if t.status in (TicketStatus.NEW, TicketStatus.WAITING_RESPONSE)]
+                if queue:
+                    session.state = State.PSY_TICKETS_LIST
+                    session.pagination_offset = 0
+                    session.selected_ticket_id = None
+                    return session, self._render_psy_queue_page(queue, 0)
+                session.state = State.PSY_MENU
+                session.selected_ticket_id = None
+                return session, self._PSY_MENU_TEXT
+            
+            elif message_lower in ['1', 'взять в работу'] and ticket and ticket.assigned_to != user_id:
+                success = self.assign_ticket(session.selected_ticket_id, user_id)
+                if success:
+                    session.state = State.PSY_MENU
+                    session.selected_ticket_id = None
+                    return session, f"✅ Заявка взята в работу"
+                return session, "❌ Ошибка при назначении заявки"
+            
+            elif message_lower in ['1', 'изменить статус'] and ticket and ticket.assigned_to == user_id:
+                session.state = State.PSY_CHANGE_STATUS
+                response = f"📌 *Заявка {ticket.id[:8]}*\n"
+                response += f"Текущий статус: {ticket.status.value}\n\n"
+                response += "*Выберите новый статус:*\n"
+                response += "1️⃣ В работе\n"
+                response += "2️⃣ Ожидание ответа\n"
+                response += "3️⃣ Закрыто\n"
+                response += "0️⃣ Отмена"
                 return session, response
             
-            elif message_lower in ['3', 'обычное меню']:
-                session.state = State.MENU
-                return session, "Перешли в обычное меню"
+            elif message_lower in ['2', 'начать чат', 'закрыть чат'] and ticket and ticket.assigned_to == user_id:
+                # Проверяем, есть ли активный чат
+                client_session = self.session_repo.get(ticket.user_id)
+                chat_active = (client_session and client_session.state == State.USER_IN_CHAT 
+                              and client_session.active_chat_ticket_id == ticket.id)
+                
+                if chat_active and message_lower in ['2', 'закрыть чат']:
+                    # Закрываем чат
+                    client_session.state = State.MENU
+                    client_session.active_chat_ticket_id = None
+                    self.session_repo.save(client_session)
+                    
+                    self.pending_notifications.append((
+                        ticket.user_id,
+                        "💬 *Чат завершён*\n\nПсихолог завершил чат. Спасибо за обращение!\n\nВы возвращены в главное меню."
+                    ))
+                    
+                    session.active_chat_ticket_id = None
+                    return session, self._render_psy_ticket_card(ticket, user_id)
+                
+                elif not chat_active and message_lower in ['2', 'начать чат']:
+                    # Начинаем чат — переводим психолога в режим чата
+                    session.state = State.PSY_TICKET_CHAT
+                    session.active_chat_ticket_id = ticket.id
+                    
+                    # Переводим пользователя в режим чата
+                    if client_session is None:
+                        client_session = UserSession(user_id=ticket.user_id, state=State.USER_IN_CHAT)
+                    else:
+                        client_session.state = State.USER_IN_CHAT
+                    client_session.active_chat_ticket_id = ticket.id
+                    self.session_repo.save(client_session)
+                    
+                    # Уведомление пользователю
+                    self.pending_notifications.append((
+                        ticket.user_id,
+                        f"💬 *Чат начат*\n\nПсихолог начал с вами чат по заявке \"{ticket.topic}\".\n\nВаши сообщения будут переданы психологу.\nДля завершения чата напишите /end"
+                    ))
+                    
+                    return session, f"💬 *Чат начат*\n\nВы подключились к чату с пользователем ({ticket.user_id}) по заявке \"{ticket.topic}\".\n\nВаши сообщения будут переданы пользователю.\nДля завершения чата напишите /end"
+                
+                else:
+                    return session, "ℹ️ Действие не соответствует текущему состоянию чата"
+            
+            else:
+                if ticket and ticket.assigned_to == user_id:
+                    return session, "❌ Введите номер действия (1-2) или 0 (Назад к списку)"
+                return session, "❌ Введите 1 (Взять в работу) или 0 (Назад к списку)"
+        
+        elif session.state == State.PSY_CHANGE_STATUS:
+            ticket = self.ticket_repo.get(session.selected_ticket_id) if session.selected_ticket_id else None
+            
+            if message_lower in ['0', 'отмена']:
+                if ticket:
+                    session.state = State.PSY_TICKET_OPEN
+                    response = self._render_psy_ticket_card(ticket, user_id)
+                    return session, response
+                session.state = State.PSY_MENU
+                return session, self._PSY_MENU_TEXT
+            
+            status_map = {
+                '1': TicketStatus.IN_PROGRESS,
+                'в работе': TicketStatus.IN_PROGRESS,
+                '2': TicketStatus.WAITING_RESPONSE,
+                'ожидание ответа': TicketStatus.WAITING_RESPONSE,
+                '3': TicketStatus.CLOSED,
+                'закрыто': TicketStatus.CLOSED,
+            }
+            
+            new_status = status_map.get(message_lower)
+            if new_status and ticket:
+                self.update_ticket_status(session.selected_ticket_id, new_status)
+                session.state = State.PSY_MENU
+                session.selected_ticket_id = None
+                return session, f"✅ Статус заявки изменён на: {new_status.value}"
+            
+            return session, "❌ Введите номер статуса (1-3) или 0 (Отмена)"
+        
+        elif session.state == State.PSY_TICKET_CHAT:
+            # Этот блок не должен вызываться — обработка вынесена выше
+            return self._handle_psy_chat_message(session, message, message_lower, user_id)
         
         # Если психолог в обычной заявке - то же самое
         return self.state_machine.process(session, message)
+
+    def _handle_psy_chat_message(self, session: UserSession, message: str, message_lower: str, user_id: str) -> tuple:
+        """Обработка сообщений психолога в режиме чата"""
+        ticket_id = session.active_chat_ticket_id or session.selected_ticket_id
+        ticket = self.ticket_repo.get(ticket_id) if ticket_id else None
+
+        if message_lower in ['/end', 'end', '/закрыть чат', 'закрыть чат']:
+            # Завершаем чат со стороны психолога
+            if ticket:
+                client_session = self.session_repo.get(ticket.user_id)
+                if client_session and client_session.state == State.USER_IN_CHAT and client_session.active_chat_ticket_id == ticket.id:
+                    client_session.state = State.MENU
+                    client_session.active_chat_ticket_id = None
+                    self.session_repo.save(client_session)
+
+                    self.pending_notifications.append((
+                        ticket.user_id,
+                        "💬 *Чат завершён*\n\nПсихолог завершил чат. Спасибо за обращение!\n\nВы возвращены в главное меню."
+                    ))
+
+            session.state = State.PSY_TICKET_OPEN
+            session.active_chat_ticket_id = None
+            if ticket:
+                return session, f"💬 *Чат завершён*\n\n" + self._render_psy_ticket_card(ticket, user_id)
+            return session, "💬 *Чат завершён*"
+
+        elif message_lower in ['/menu', 'menu', '/start', 'start']:
+            # /menu и /start тоже завершают чат и возвращают в меню психолога
+            if ticket:
+                client_session = self.session_repo.get(ticket.user_id)
+                if client_session and client_session.state == State.USER_IN_CHAT and client_session.active_chat_ticket_id == ticket.id:
+                    client_session.state = State.MENU
+                    client_session.active_chat_ticket_id = None
+                    self.session_repo.save(client_session)
+
+                    self.pending_notifications.append((
+                        ticket.user_id,
+                        "💬 *Чат завершён*\n\nПсихолог завершил чат. Спасибо за обращение!\n\nВы возвращены в главное меню."
+                    ))
+
+            session.state = State.PSY_MENU
+            session.active_chat_ticket_id = None
+            session.selected_ticket_id = None
+            return session, self._PSY_MENU_TEXT
+
+        else:
+            # Пересылаем сообщение пользователю
+            if ticket:
+                self.add_message_to_ticket(ticket.id, user_id, message)
+                self.pending_notifications.append((
+                    ticket.user_id,
+                    f"💬 *Сообщение от психолога:*\n\n{message}"
+                ))
+                return session, f"✉️ #{self._short_ticket_id(ticket.id)} Сообщение отправлено"
+            return session, "❌ Ошибка: заявка не найдена"
+
+    def _handle_user_in_chat(self, session: UserSession, message: str) -> tuple:
+        """Обработка сообщений пользователя в режиме чата с психологом"""
+        message_lower = message.strip().lower()
+        
+        ticket = self.ticket_repo.get(session.active_chat_ticket_id) if session.active_chat_ticket_id else None
+        
+        if message_lower in ['/end', 'end', '/menu', 'menu']:
+            # Пользователь выходит из чата
+            psy_id = ticket.assigned_to if ticket else None
+            
+            if psy_id:
+                psy_session = self.session_repo.get(psy_id)
+                if psy_session and psy_session.state == State.PSY_TICKET_CHAT and psy_session.active_chat_ticket_id == session.active_chat_ticket_id:
+                    psy_session.state = State.PSY_TICKET_OPEN
+                    psy_session.active_chat_ticket_id = None
+                    self.session_repo.save(psy_session)
+                
+                self.pending_notifications.append((
+                    psy_id,
+                    "💬 *Чат завершён*\n\nПользователь завершил чат."
+                ))
+            
+            session.state = State.MENU
+            session.active_chat_ticket_id = None
+            return session, "💬 *Чат завершён*\n\nВы возвращены в главное меню."
+        
+        # Пересылаем сообщение психологу
+        if ticket and ticket.assigned_to:
+            self.add_message_to_ticket(ticket.id, session.user_id, message)
+            self.pending_notifications.append((
+                ticket.assigned_to,
+                f"💬 *Сообщение от пользователя #{self._short_ticket_id(ticket.id)} ({session.user_id}):*\n\n{message}"
+            ))
+            return session, "✉️ Сообщение отправлено психологу"
+        
+        # Чат не найден — возвращаем в меню
+        session.state = State.MENU
+        session.active_chat_ticket_id = None
+        return session, "❌ Чат не найден. Вы возвращены в главное меню."
+
+    def get_pending_notifications(self) -> list[tuple[str, str]]:
+        """Получить и очистить очередь уведомлений для отправки"""
+        notifications = self.pending_notifications.copy()
+        self.pending_notifications.clear()
+        return notifications
+
     def _create_ticket_from_form(self, session: UserSession) -> Ticket:
         """Создание заявки из заполненной формы"""
         form = session.consultation_form
@@ -585,6 +879,76 @@ class BotService:
         # Сортируем по количеству активных заявок (меньше - лучше)
         psychologists.sort(key=lambda p: workload.get(p.user_id, 0))
         return psychologists
+
+    def _render_psy_ticket_card(self, ticket: Ticket, user_id: str) -> str:
+        """Рендеринг карточки заявки для психолога"""
+        response = f"📌 *Заявка {ticket.id[:8]}*\n\n"
+        response += f"Тема: {ticket.topic}\n"
+        response += f"Критичность: {ticket.severity.value}\n"
+        response += f"Статус: {ticket.status.value}\n"
+        response += f"От: {ticket.user_id}\n"
+        response += f"\n💬 {ticket.message}\n" if ticket.message else ""
+        response += "\n*Действия:*\n"
+        if ticket.assigned_to == user_id:
+            response += "1️⃣ Изменить статус\n"
+            # Проверяем, есть ли активный чат
+            user_session = self.session_repo.get(ticket.user_id)
+            if user_session and user_session.state == State.USER_IN_CHAT and user_session.active_chat_ticket_id == ticket.id:
+                response += "2️⃣ Закрыть чат\n"
+            else:
+                response += "2️⃣ Начать чат\n"
+        else:
+            response += "1️⃣ Взять в работу\n"
+        response += "0️⃣ Назад к списку"
+        return response
+
+    def _render_psy_queue_page(self, tickets: list[Ticket], offset: int) -> str:
+        """Рендеринг страницы очереди заявок для психолога"""
+        page_tickets = tickets[offset:offset+10]
+        total = len(tickets)
+        page_num = (offset // 10) + 1
+        max_pages = (total + 9) // 10
+        
+        response = f"📋 *Очередь заявок (стр. {page_num}/{max_pages})*\n"
+        response += f"_Всего: {total}_\n\n"
+        
+        for i, ticket in enumerate(page_tickets, 1):
+            topic = ticket.topic[:30] + "..." if len(ticket.topic) > 30 else ticket.topic
+            date_str = ticket.created_at.strftime("%d.%m")
+            response += f"{i}. {topic} ({ticket.severity.value}) - {date_str}\n"
+            response += f"   От: {ticket.user_id}\n"
+        
+        response += "\n📍 *Команды:*\n"
+        response += "Введите номер заявки (1-10)\n"
+        if offset > 0:
+            response += "Типовые: `далее` `назад` `отмена`"
+        else:
+            response += "Типовые: `далее` `отмена`"
+        
+        return response
+
+    def _render_psy_my_tickets_page(self, tickets: list[Ticket], offset: int) -> str:
+        """Рендеринг страницы 'Мои заявки' для психолога"""
+        page_tickets = tickets[offset:offset+10]
+        total = len(tickets)
+        page_num = (offset // 10) + 1
+        max_pages = (total + 9) // 10
+        
+        response = f"📋 *Мои заявки (стр. {page_num}/{max_pages})*\n"
+        response += f"_Всего: {total}_\n\n"
+        
+        for i, ticket in enumerate(page_tickets, 1):
+            topic = ticket.topic[:30] + "..." if len(ticket.topic) > 30 else ticket.topic
+            response += f"{i}. {topic} ({ticket.status.value})\n"
+        
+        response += "\n📍 *Команды:*\n"
+        response += "Введите номер заявки (1-10)\n"
+        if offset > 0:
+            response += "Типовые: `далее` `назад` `отмена`"
+        else:
+            response += "Типовые: `далее` `отмена`"
+        
+        return response
 
     def _render_tickets_page(self, tickets: list[Ticket], offset: int) -> str:
         """Рендеринг страницы заявок для выбора"""

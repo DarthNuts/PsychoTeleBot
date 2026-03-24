@@ -16,10 +16,12 @@ class State(str, Enum):
     AI_CHAT = "AI_CHAT"
     TERMS = "TERMS"
     PSY_QUESTION = "PSY_QUESTION"
+    USER_IN_CHAT = "USER_IN_CHAT"
     
     # Психолог/Админ
     PSY_MENU = "PSY_MENU"
     PSY_TICKETS_LIST = "PSY_TICKETS_LIST"
+    PSY_MY_TICKETS = "PSY_MY_TICKETS"
     PSY_TICKET_OPEN = "PSY_TICKET_OPEN"
     PSY_TICKET_CHAT = "PSY_TICKET_CHAT"
     PSY_CHANGE_STATUS = "PSY_CHANGE_STATUS"
@@ -93,6 +95,7 @@ class UserSession:
     consultation_form: ConsultationForm = field(default_factory=ConsultationForm)
     ai_context: list[dict] = field(default_factory=list)
     current_ticket_id: Optional[str] = None
+    active_chat_ticket_id: Optional[str] = None  # ID заявки для активного чата с психологом
     pagination_offset: int = 0  # Для пагинации списков
     selected_ticket_id: Optional[str] = None  # Выбранная заявка при назначении
 

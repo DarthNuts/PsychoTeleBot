@@ -77,7 +77,21 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("menu", self.handle_menu))
         self.application.add_handler(CommandHandler("clear", self.handle_clear))
         self.application.add_handler(CommandHandler("help", self.handle_help))
+        self.application.add_handler(CommandHandler("end", self.handle_end))
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
+
+    async def _send_pending_notifications(self, context: ContextTypes.DEFAULT_TYPE):
+        """Отправить накопленные уведомления другим пользователям"""
+        notifications = self.bot_service.get_pending_notifications()
+        for target_user_id, text in notifications:
+            try:
+                await context.bot.send_message(
+                    chat_id=int(target_user_id),
+                    text=text,
+                    parse_mode="Markdown"
+                )
+            except Exception as e:
+                logger.error(f"Failed to send notification to {target_user_id}: {e}")
 
     async def handle_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = str(update.effective_user.id)
@@ -89,17 +103,26 @@ class TelegramBot:
             user_id, "/start", username, first_name, last_name
         )
         await update.message.reply_text(response, parse_mode="Markdown")
+        await self._send_pending_notifications(context)
         logger.info(f"User {user_id} ({username}) started the bot")
 
     async def handle_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = str(update.effective_user.id)
         response = self.bot_service.process_message(user_id, "/menu")
         await update.message.reply_text(response, parse_mode="Markdown")
+        await self._send_pending_notifications(context)
 
     async def handle_clear(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = str(update.effective_user.id)
         response = self.bot_service.process_message(user_id, "/clear")
         await update.message.reply_text(response, parse_mode="Markdown")
+        await self._send_pending_notifications(context)
+
+    async def handle_end(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_id = str(update.effective_user.id)
+        response = self.bot_service.process_message(user_id, "/end")
+        await update.message.reply_text(response, parse_mode="Markdown")
+        await self._send_pending_notifications(context)
 
     async def handle_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         help_text = """🤖 *PsychoTeleBot - Помощь*
@@ -126,6 +149,7 @@ class TelegramBot:
             user_id, message, username, first_name, last_name
         )
         await update.message.reply_text(response, parse_mode="Markdown")
+        await self._send_pending_notifications(context)
     def run(self):
         logger.info("Starting PsychoTeleBot...")
         self.application.run_polling(allowed_updates=Update.ALL_TYPES)

@@ -462,7 +462,8 @@ class AIService:
             data = response.json()
 
             if "choices" in data and len(data["choices"]) > 0:
-                ai_reply = data["choices"][0]["message"]["content"].strip()
+                raw_content = data["choices"][0]["message"]["content"]
+                ai_reply = raw_content.strip() if raw_content else ""
                 if not ai_reply:
                     logger.warning("AI returned empty response")
                     return self.FALLBACK_RESPONSE

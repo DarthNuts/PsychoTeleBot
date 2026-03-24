@@ -47,6 +47,7 @@ class SQLiteSessionRepository(SessionRepository, SQLiteDatabase):
                 current_ticket_id TEXT,
                 pagination_offset INTEGER DEFAULT 0,
                 selected_ticket_id TEXT,
+                active_chat_ticket_id TEXT,
                 created_at TEXT,
                 updated_at TEXT
             )
@@ -59,6 +60,10 @@ class SQLiteSessionRepository(SessionRepository, SQLiteDatabase):
             pass
         try:
             conn.execute("ALTER TABLE sessions ADD COLUMN selected_ticket_id TEXT")
+        except:
+            pass
+        try:
+            conn.execute("ALTER TABLE sessions ADD COLUMN active_chat_ticket_id TEXT")
         except:
             pass
         
@@ -99,6 +104,7 @@ class SQLiteSessionRepository(SessionRepository, SQLiteDatabase):
         session.current_ticket_id = row_dict.get('current_ticket_id')
         session.pagination_offset = row_dict.get('pagination_offset', 0) or 0
         session.selected_ticket_id = row_dict.get('selected_ticket_id')
+        session.active_chat_ticket_id = row_dict.get('active_chat_ticket_id')
         
         return session
     
@@ -116,8 +122,8 @@ class SQLiteSessionRepository(SessionRepository, SQLiteDatabase):
         
         conn.execute("""
             INSERT OR REPLACE INTO sessions 
-            (user_id, state, form_data, ai_context, current_ticket_id, pagination_offset, selected_ticket_id, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (user_id, state, form_data, ai_context, current_ticket_id, pagination_offset, selected_ticket_id, active_chat_ticket_id, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             session.user_id,
             session.state.value,
@@ -126,6 +132,7 @@ class SQLiteSessionRepository(SessionRepository, SQLiteDatabase):
             session.current_ticket_id,
             session.pagination_offset,
             session.selected_ticket_id,
+            session.active_chat_ticket_id,
             datetime.now().isoformat()
         ))
         conn.commit()
